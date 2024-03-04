@@ -1,0 +1,6 @@
+# ignore everything, but the testing_server.py file
+*
+!testing_server.py
+!README.md
+!LICENSE
+!.gitignore
