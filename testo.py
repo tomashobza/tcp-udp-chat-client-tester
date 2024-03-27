@@ -202,7 +202,10 @@ def all_args(tester):
 @testcase
 def udp_hello(tester):
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
+
+    # Invalid command for the START state
     tester.execute("Hello")
+
     stdout = tester.get_stdout()
     stderr = tester.get_stderr()
     assert "ERR:" in stderr, "Output does not match expected output."
@@ -211,7 +214,10 @@ def udp_hello(tester):
 @testcase
 def udp_invalid_command(tester):
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
+
+    # Invalid command in general
     tester.execute("/pepe")
+
     stdout = tester.get_stdout()
     stderr = tester.get_stderr()
     assert "ERR:" in stderr, "Output does not match expected output."
@@ -221,10 +227,27 @@ def udp_invalid_command(tester):
 def udp_auth(tester):
     tester.start_server("udp", 4567)
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
+
+    # Send AUTH command
     tester.execute("/auth a b c")
 
+    # Check AUTH message received
     message = tester.receive_message()
+    assert (
+        message == b"\x02\x00\x00a\x00c\x00b\x00"
+    ), "Incoming message does not match expected message."
 
+
+@testcase
+def udp_auth_port(tester):
+    tester.start_server("udp", 1234)
+    tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "1234"])
+
+    # Send AUTH command
+    tester.execute("/auth a b c")
+
+    # Check AUTH message received
+    message = tester.receive_message()
     assert (
         message == b"\x02\x00\x00a\x00c\x00b\x00"
     ), "Incoming message does not match expected message."
@@ -234,11 +257,12 @@ def udp_auth(tester):
 def udp_auth_nok(tester):
     tester.start_server("udp", 4567)
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
+
+    # Send AUTH command
     tester.execute("/auth a b c")
 
     # Expect the auth message to be received by the server
     message = tester.receive_message()
-
     assert (
         message == b"\x02\x00\x00a\x00c\x00b\x00"
     ), "Incoming message does not match expected AUTH message."
@@ -264,9 +288,118 @@ def udp_auth_nok(tester):
     ), "Incoming message does not match expected CONFIRM message."
 
 
+@testcase
+def udp_auth_nok_ok(tester):
+    tester.start_server("udp", 4567)
+    tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
+
+    # Send AUTH command
+    tester.execute("/auth a b c")
+
+    # Expect the auth message to be received by the server
+    message = tester.receive_message()
+    assert (
+        message == b"\x02\x00\x00a\x00c\x00b\x00"
+    ), "Incoming message does not match expected AUTH message."
+
+    # Confirm the AUTH message
+    tester.send_message(b"\x00\x00\x00")
+
+    # Reply with NOK
+    tester.send_message(b"\x01\x00\x00\x00\x00\x00nene\x00")
+
+    sleep(0.2)
+
+    # Check the output, should contain "Failure: nene"
+    stderr = tester.get_stderr()
+    assert any(
+        ["Failure: nene" in line for line in stderr.split("\n")]
+    ), "Output does not match expected 'Failure: nene' output."
+
+    # Should receive CONFIRM for the REPLY message
+    message = tester.receive_message()
+    assert (
+        message == b"\x00\x00\x00"
+    ), "Incoming message does not match expected CONFIRM message."
+
+    # Send a second AUTH message
+    tester.execute("/auth a b c")
+
+    # Expect the auth message to be received by the server
+    message = tester.receive_message()
+    assert (
+        message == b"\x02\x00\x01a\x00c\x00b\x00"
+    ), "Incoming message does not match expected AUTH message."
+
+    # Confirm the AUTH message
+    tester.send_message(b"\x00\x00\x01")
+
+    # Reply with OK
+    tester.send_message(b"\x01\x00\x01\x01\x00\x01yes\x00")
+
+    sleep(0.2)
+
+    # Check the output, should contain "Success: yes"
+    stderr = tester.get_stderr()
+    assert any(
+        ["Success: yes" in line for line in stderr.split("\n")]
+    ), "Output does not match expected 'Success: yes' output."
+
+    # Should receive CONFIRM for the REPLY message
+    message = tester.receive_message()
+    assert (
+        message == b"\x00\x00\x01"
+    ), "Incoming message does not match expected CONFIRM message."
+
+
+@testcase
+def udp_auth_port_change(tester):
+    # Start initial port listener
+    tmp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    tmp_socket.bind(("localhost", 1234))
+
+    # Start normal port listener
+    tester.start_server("udp", 4567)
+
+    # Start client on temp port
+    tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "1234"])
+
+    # Send AUTH command
+    tester.execute("/auth a b c")
+
+    # Expect the auth message to be received by the server on tmp socket
+    tmp_socket.settimeout(10)
+    message, client_address = tmp_socket.recvfrom(1024)
+    assert (
+        message == b"\x02\x00\x00a\x00c\x00b\x00"
+    ), "Incoming message does not match expected AUTH message."
+
+    # Confirm the AUTH message on tmp socket
+    tmp_socket.sendto(b"\x00\x00\x00", client_address)
+
+    # Reply with NOK from different port (from now on the client should switch to it)
+    tester.send_message(b"\x01\x00\x00\x01\x00\x00jojo\x00")
+
+    sleep(0.2)
+
+    # Check the output, should contain "Success: jojo"
+    stderr = tester.get_stderr()
+    assert any(
+        ["Success: jojo" in line for line in stderr.split("\n")]
+    ), "Output does not match expected 'Success: jojo' output."
+
+    # Should receive CONFIRM for the REPLY message
+    message = tester.receive_message()
+    assert (
+        message == b"\x00\x00\x00"
+    ), "Incoming message does not match expected CONFIRM message."
+
+
 def auth_and_reply(tester):
     tester.start_server("udp", 4567)
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
+
+    # Send AUTH command
     tester.execute("/auth a b c")
 
     # Expect the auth message to be received by the server
@@ -395,16 +528,23 @@ def udp_server_err2(tester):
 
     sleep(0.2)
 
+    # The ERR message should be printed out exactly like this
     stderr = tester.get_stderr()
     assert any(
         ["ERR FROM server: chyba" in line for line in stderr.split("\n")]
     ), "Output does not match expected error message."
 
-    # Should receive CONFIRM for the MSG message
+    # Should receive CONFIRM for the ERROR message
     message = tester.receive_message()
     assert (
         message == b"\x00\x00\x01"
     ), "Incoming message does not match expected CONFIRM message."
+
+    # Should receive BYE for the ERROR message
+    message = tester.receive_message()
+    assert (
+        message == b"\xff\x00\x01"
+    ), "Incoming message does not match expected BYE message."
 
 
 @testcase
@@ -422,15 +562,124 @@ def udp_join_ok(tester):
         message == b"\x03\x00\x01channel\x00user\x00"
     ), "Incoming message does not match expected JOIN message."
 
+    # Send REPLY message
+    tester.send_message(b"\x01\x00\x01\x01\x00\x01jojo\x00")
+
+    sleep(0.2)
+
+    # Check the output, should contain "Success: jojo"
+    stderr = tester.get_stderr()
+    assert any(
+        ["Success: jojo" in line for line in stderr.split("\n")]
+    ), "Output does not match expected 'Success: jojo' output."
+
+    # Should receive CONFIRM for the REPLY message
+    message = tester.receive_message()
+    assert (
+        message == b"\x00\x00\x01"
+    ), "Incoming message does not match expected CONFIRM message."
+
 
 @testcase
 def udp_join_nok(tester):
-    yield
+    auth_and_reply(tester)
+
+    tester.execute("/rename user")
+
+    tester.execute("/join channel")
+
+    # Expect the join message to be received by the server
+    message = tester.receive_message()
+
+    assert (
+        message == b"\x03\x00\x01channel\x00user\x00"
+    ), "Incoming message does not match expected JOIN message."
+
+    # Send REPLY message
+    tester.send_message(b"\x01\x00\x01\x00\x00\x01jojo\x00")
+
+    sleep(0.2)
+
+    # Check the output, should contain "Failure: jojo"
+    stderr = tester.get_stderr()
+    assert any(
+        ["Failure: jojo" in line for line in stderr.split("\n")]
+    ), "Output does not match expected 'Failure: jojo' output."
+
+    # Should receive CONFIRM for the REPLY message
+    message = tester.receive_message()
+    assert (
+        message == b"\x00\x00\x01"
+    ), "Incoming message does not match expected CONFIRM message."
 
 
 @testcase
 def udp_multiple_auth(tester):
-    yield
+    auth_and_reply(tester)
+
+    tester.execute("/auth d e f")
+
+    sleep(0.2)
+
+    # Client should not allow another auth and should output ERR
+    stderr = tester.get_stderr()
+    assert any(
+        ["ERR: " in line for line in stderr.split("\n")]
+    ), "Output does not match expected 'ERR: ' output."
+
+
+@testcase
+def udp_invalid_msg(tester):
+    auth_and_reply(tester)
+
+    # Send invalid message
+    tester.send_message(b"\x06\x00\x01")
+
+    sleep(0.2)
+
+    # Check the output, should contain "ERR: "
+    stderr = tester.get_stderr()
+    assert any(
+        ["ERR: " in line for line in stderr.split("\n")]
+    ), "Output does not match expected 'ERR: ' output."
+
+    # Should receive ERR for the invalid message
+    message = tester.receive_message()
+    assert (
+        b"\xfe\x00\x01c\x00" in message
+    ), "Incoming message does not match expected ERR message."
+
+
+def udp_auth_err(tester):
+    tester.start_server("udp", 4567)
+    tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
+    tester.execute("/auth a b c")
+
+    # Expect the auth message to be received by the server
+    message = tester.receive_message()
+    assert (
+        message == b"\x02\x00\x00a\x00c\x00b\x00"
+    ), "Incoming message does not match expected AUTH message."
+
+    # Confirm the AUTH message
+    tester.send_message(b"\x00\x00\x00")
+
+    # Send ERR message
+    tester.send_message(b"\xfe\x00\x01server\x00ajaj\x00")
+
+    sleep(0.2)
+
+    # The client should output the ERR message exactly like this
+    stderr = tester.get_stderr()
+    assert any(
+        ["ERR FROM server: ajaj" in line for line in stderr.split("\n")]
+    ), "Output does not match expected error message."
+
+    # The client should respond with BYE message
+    message = tester.receive_message()
+    assert (
+        message == b"\xff\x00\x01"
+    ), "Incoming message does not match expected BYE message."
 
 
 ### END TEST CASES ###
