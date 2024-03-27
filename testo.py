@@ -196,7 +196,7 @@ def all_args(tester):
     assert tester.get_return_code() == None, "Expected zero exit code."
 
 
-# PART 2: UDP - Testing basic commands
+# PART 2: UDP
 
 
 @testcase
@@ -209,6 +209,19 @@ def udp_hello(tester):
     stdout = tester.get_stdout()
     stderr = tester.get_stderr()
     assert "ERR:" in stderr, "Output does not match expected output."
+
+
+@testcase
+def udp_not_auth(tester):
+    tester.start_server("udp", 4567)
+    tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
+    tester.execute("/join")
+
+    # The ERR message should be printed out exactly like this
+    stderr = tester.get_stderr()
+    assert any(
+        ["ERR:" in line for line in stderr.split("\n")]
+    ), "Output does not match expected error message."
 
 
 @testcase
@@ -395,6 +408,7 @@ def udp_auth_port_change(tester):
     ), "Incoming message does not match expected CONFIRM message."
 
 
+# Helper function
 def auth_and_reply(tester):
     tester.start_server("udp", 4567)
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
@@ -650,6 +664,7 @@ def udp_invalid_msg(tester):
     ), "Incoming message does not match expected ERR message."
 
 
+@testcase
 def udp_auth_err(tester):
     tester.start_server("udp", 4567)
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
@@ -675,11 +690,45 @@ def udp_auth_err(tester):
         ["ERR FROM server: ajaj" in line for line in stderr.split("\n")]
     ), "Output does not match expected error message."
 
+    # Check confirm of the ERR message
+    message = tester.receive_message()
+    assert (
+        message == b"\x00\x00\x01"
+    ), "Incoming message does not match expected CONFIRM message."
+
     # The client should respond with BYE message
     message = tester.receive_message()
     assert (
         message == b"\xff\x00\x01"
     ), "Incoming message does not match expected BYE message."
+
+
+# PART 2: TCP
+
+
+@testcase
+def tcp_hello(tester):
+    tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
+
+    # Invalid command for the START state
+    tester.execute("Hello")
+
+    stdout = tester.get_stdout()
+    stderr = tester.get_stderr()
+    assert "ERR:" in stderr, "Output does not match expected output."
+
+
+@testcase
+def tcp_not_auth(tester):
+    tester.start_server("tcp", 4567)
+    tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
+    tester.execute("/join")
+
+    # The ERR message should be printed out exactly like this
+    stderr = tester.get_stderr()
+    assert any(
+        ["ERR:" in line for line in stderr.split("\n")]
+    ), "Output does not match expected error message."
 
 
 ### END TEST CASES ###
