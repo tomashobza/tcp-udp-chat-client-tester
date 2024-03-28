@@ -409,7 +409,7 @@ def udp_auth_port_change(tester):
     # Confirm the AUTH message on tmp socket
     tmp_socket.sendto(b"\x00\x00\x00", client_address)
 
-    # Reply with NOK from different port (from now on the client should switch to it)
+    # Reply with OK from different port (from now on the client should switch to it)
     tester.send_message(b"\x01\x00\x00\x01\x00\x00jojo\x00")
 
     sleep(0.2)
@@ -445,7 +445,7 @@ def auth_and_reply(tester):
     # Confirm the AUTH message
     tester.send_message(b"\x00\x00\x00")
 
-    # Reply with NOK
+    # Reply with OK
     tester.send_message(b"\x01\x00\x00\x01\x00\x00jojo\x00")
 
     sleep(0.2)
@@ -486,14 +486,14 @@ def udp_svr_msg(tester):
     auth_and_reply(tester)
 
     # Send a message from the server
-    tester.send_message(b"\x04\x00\x01c\x00ahojky\x00")
+    tester.send_message(b"\x04\x00\x01smrt\x00ahojky\x00")
 
     sleep(0.2)
 
     # Check the output, should contain "ahojky"
     stdout = tester.get_stdout()
     assert any(
-        ["c: ahojky" in line for line in stdout.split("\n")]
+        ["smrt: ahojky" in line for line in stdout.split("\n")]
     ), "Output does not match expected output."
 
     # Should receive CONFIRM for the MSG message
@@ -523,6 +523,19 @@ def udp_bye2(tester):
 
     # Send a message from the server
     tester.send_signal(signal.SIGINT)
+
+    message = tester.receive_message()
+    assert (
+        message == b"\xff\x00\x01"
+    ), "Incoming message does not match expected BYE message."
+
+
+@testcase
+def udp_bye3(tester):
+    auth_and_reply(tester)
+
+    # Send a message from the server
+    tester.process.stdin.close()
 
     message = tester.receive_message()
     assert (
@@ -722,7 +735,7 @@ def udp_auth_err(tester):
     ), "Incoming message does not match expected BYE message."
 
 
-# PART 2: TCP
+# PART 3: TCP
 
 
 @testcase
@@ -752,6 +765,19 @@ def tcp_not_auth(tester):
 
 
 @testcase
+def tcp_invalid_command(tester):
+    tester.start_server("tcp", 4567)
+    tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
+
+    # Invalid command in general
+    tester.execute("/pepe")
+
+    stdout = tester.get_stdout()
+    stderr = tester.get_stderr()
+    assert "ERR:" in stderr, "Output does not match expected output."
+
+
+@testcase
 def tcp_auth(tester):
     tester.start_server("tcp", 4567)
     tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
@@ -769,15 +795,18 @@ def tcp_auth_ok(tester):
     tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
     tester.execute("/auth a b c")
 
+    # Check AUTH message received
     message = tester.receive_message()
     assert (
         message == "AUTH a AS c USING b\r\n"
     ), "Incoming message does not match expected AUTH message."
 
+    # Send REPLY message
     tester.send_message("REPLY OK IS vsechno cajk\r\n")
 
     sleep(0.2)
 
+    # Check the output, should contain "Success: vsechno cajk"
     stderr = tester.get_stderr()
     assert any(
         ["Success: vsechno cajk" == line for line in stderr.split("\n")]
@@ -803,6 +832,299 @@ def tcp_auth_nok(tester):
     assert any(
         ["Failure: nic cajk" == line for line in stderr.split("\n")]
     ), "Output does not match expected error message."
+
+
+@testcase
+def tcp_auth_port(tester):
+    tester.start_server("tcp", 1234)
+    tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "1234"])
+
+    # Send AUTH command
+    tester.execute("/auth a b c")
+
+    # Check AUTH message received
+    message = tester.receive_message()
+    assert (
+        message == "AUTH a AS c USING b\r\n"
+    ), "Incoming message does not match expected message."
+
+
+@testcase
+def tcp_auth_nok_ok(tester):
+    tester.start_server("tcp", 4567)
+    tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
+    tester.execute("/auth a b c")
+
+    message = tester.receive_message()
+    assert (
+        message == "AUTH a AS c USING b\r\n"
+    ), "Incoming message does not match expected AUTH message."
+
+    tester.send_message("REPLY NOK IS nic cajk\r\n")
+
+    sleep(0.2)
+
+    stderr = tester.get_stderr()
+    assert any(
+        ["Failure: nic cajk" == line for line in stderr.split("\n")]
+    ), "Output does not match expected error message."
+
+    tester.execute("/auth d e f")
+
+    message = tester.receive_message()
+    assert (
+        message == "AUTH d AS f USING e\r\n"
+    ), "Incoming message does not match expected AUTH message."
+
+    tester.send_message("REPLY OK IS vsechno cajk\r\n")
+
+    sleep(0.2)
+
+    stderr = tester.get_stderr()
+    assert any(
+        ["Success: vsechno cajk" == line for line in stderr.split("\n")]
+    ), "Output does not match expected error message."
+
+
+# Helper function
+def tcp_auth_and_reply(tester):
+    tester.start_server("tcp", 4567)
+    tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
+
+    # Send AUTH command
+    tester.execute("/auth a b c")
+
+    # Expect the auth message to be received by the server
+    message = tester.receive_message()
+    assert (
+        message == "AUTH a AS c USING b\r\n"
+    ), "Incoming message does not match expected AUTH message."
+
+    # Send REPLY message
+    tester.send_message("REPLY OK IS vsechno cajk\r\n")
+
+    sleep(0.2)
+
+    # Check the output, should contain "Success: vsechno cajk"
+    stderr = tester.get_stderr()
+    assert any(
+        ["Success: vsechno cajk" == line for line in stderr.split("\n")]
+    ), "Output does not match expected error message."
+
+
+@testcase
+def tcp_auth_ok(tester):
+    tcp_auth_and_reply(tester)
+
+
+@testcase
+def tcp_msg(tester):
+    tcp_auth_and_reply(tester)
+
+    tester.execute("ahojky")
+
+    # Expect the message to be received by the server
+    message = tester.receive_message()
+    assert (
+        message == "MSG FROM c IS ahojky\r\n"
+    ), "Incoming message does not match expected MSG message."
+
+
+@testcase
+def tcp_svr_msg(tester):
+    tcp_auth_and_reply(tester)
+
+    # Send a message from the server
+    tester.send_message("MSG FROM SeverusSnape IS ahojky\r\n")
+
+    sleep(0.2)
+
+    # Check the output, should contain "ahojky"
+    stdout = tester.get_stdout()
+    assert any(
+        ["SeverusSnape: ahojky" in line for line in stdout.split("\n")]
+    ), "Output does not match expected output."
+
+
+@testcase
+def tcp_bye1(tester):
+    tester.start_server("tcp", 4567)
+    tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
+
+    sleep(0.2)
+
+    # Send a message from the server
+    tester.send_signal(signal.SIGINT)
+
+    message = tester.receive_message()
+    assert message == "BYE\r\n", "Incoming message does not match expected BYE message."
+
+
+@testcase
+def tcp_bye2(tester):
+    tester.start_server("tcp", 4567)
+    tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
+
+    sleep(0.2)
+
+    # Send a message from the server
+    tester.process.stdin.close()
+
+    message = tester.receive_message()
+    assert message == "BYE\r\n", "Incoming message does not match expected BYE message."
+
+
+@testcase
+def tcp_bye3(tester):
+    tcp_auth_and_reply(tester)
+
+    # Send a message from the server
+    tester.process.stdin.close()
+
+    message = tester.receive_message()
+    assert message == "BYE\r\n", "Incoming message does not match expected BYE message."
+
+
+@testcase
+def udp_server_err1(tester):
+    tester.start_server("tcp", 4567)
+    tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
+
+    # Send a message from the server
+    tester.send_message("ERR FROM jetovp IS rdeli\r\n")
+
+    sleep(0.4)
+
+    stderr = tester.get_stderr()
+    assert any(
+        ["ERR FROM jetovp: rdeli" in line for line in stderr.split("\n")]
+    ), "Output does not match expected error message."
+
+
+@testcase
+def tcp_server_err2(tester):
+    tcp_auth_and_reply(tester)
+
+    # Send a message from the server
+    tester.send_message("ERR FROM chuj IS bobr\r\n")
+
+    sleep(0.4)
+
+    stderr = tester.get_stderr()
+    assert any(
+        ["ERR FROM chuj: bobr" in line for line in stderr.split("\n")]
+    ), "Output does not match expected error message."
+
+
+@testcase
+def tcp_join_ok(tester):
+    tcp_auth_and_reply(tester)
+
+    tester.execute("/rename user")
+
+    tester.execute("/join channel")
+
+    # Expect the join message to be received by the server
+    message = tester.receive_message()
+    assert (
+        message == "JOIN channel AS user\r\n"
+    ), "Incoming message does not match expected JOIN message."
+
+    # Send REPLY message
+    tester.send_message("REPLY OK IS takjo brasko ale bud hodnej\r\n")
+
+    sleep(0.2)
+
+    # Check the output, should contain "Success: jojo"
+    stderr = tester.get_stderr()
+    assert any(
+        ["Success: takjo brasko ale bud hodnej" in line for line in stderr.split("\n")]
+    ), "Output does not match expected 'Success: jojo' output."
+
+
+@testcase
+def tcp_join_nok(tester):
+    tcp_auth_and_reply(tester)
+
+    tester.execute("/rename user")
+
+    tester.execute("/join channel")
+
+    # Expect the join message to be received by the server
+    message = tester.receive_message()
+    assert (
+        message == "JOIN channel AS user\r\n"
+    ), "Incoming message does not match expected JOIN message."
+
+    # Send REPLY message
+    tester.send_message("REPLY NOK IS minus boiiii\r\n")
+
+    sleep(0.2)
+
+    # Check the output, should contain "Success: jojo"
+    stderr = tester.get_stderr()
+    assert any(
+        ["Failure: minus boiiii" in line for line in stderr.split("\n")]
+    ), "Output does not match expected 'Success: jojo' output."
+
+
+@testcase
+def tcp_multiple_auth(tester):
+    tcp_auth_and_reply(tester)
+
+    tester.execute("/auth d e f")
+
+    sleep(0.2)
+
+    # Client should not allow another auth and should output ERR
+    stderr = tester.get_stderr()
+    assert any(
+        ["ERR: " in line for line in stderr.split("\n")]
+    ), "Output does not match expected 'ERR: ' output."
+
+
+@testcase
+def tcp_invalid_msg(tester):
+    tcp_auth_and_reply(tester)
+
+    # Send invalid message
+    tester.send_message("TVOJE MAMINKA\r\n")
+
+    sleep(0.2)
+
+    # Check the output, should contain "ERR: "
+    stderr = tester.get_stderr()
+    assert any(
+        ["ERR: " in line for line in stderr.split("\n")]
+    ), "Output does not match expected 'ERR: ' output."
+
+
+@testcase
+def tcp_auth_err(tester):
+    tester.start_server("tcp", 4567)
+    tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
+    tester.execute("/auth a b c")
+
+    # Expect the auth message to be received by the server
+    message = tester.receive_message()
+    assert (
+        message == "AUTH a AS c USING b\r\n"
+    ), "Incoming message does not match expected AUTH message."
+
+    # Send ERR message
+    tester.send_message("ERR FROM server IS ajaj\r\n")
+
+    sleep(0.2)
+
+    # The client should output the ERR message exactly like this
+    stderr = tester.get_stderr()
+    assert any(
+        ["ERR FROM server: ajaj" in line for line in stderr.split("\n")]
+    ), "Output does not match expected error message."
+
+    # The client should respond with BYE message
+    message = tester.receive_message()
+    assert message == "BYE\r\n", "Incoming message does not match expected BYE message."
 
 
 ### END TEST CASES ###
