@@ -988,7 +988,7 @@ def tcp_bye3(tester):
 
 
 @testcase
-def udp_server_err1(tester):
+def tcp_server_err1(tester):
     tester.start_server("tcp", 4567)
     tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
 
