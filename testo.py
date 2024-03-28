@@ -11,9 +11,13 @@ import socket
 import select
 
 global debug
+global run_tcp
+global run_udp
+global test
 
 # Define a global list to hold all test case functions
-test_cases = []
+udp_test_cases = []
+tcp_test_cases = []
 
 
 def testcase(func):
@@ -39,7 +43,15 @@ def testcase(func):
 
         return passed
 
-    test_cases.append(wrapper)  # Register the test case
+    # pass in the testcase name
+    wrapper_func = wrapper
+    wrapper_func.__name__ = func.__name__
+
+    # Register the test case
+    if "udp" in func.__name__:
+        udp_test_cases.append(wrapper_func)
+    elif "tcp" in func.__name__:
+        tcp_test_cases.append(wrapper_func)
     return wrapper
 
 
@@ -59,10 +71,17 @@ class ExecutableTester:
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.server_socket.bind(("localhost", port))
             self.server_socket.listen(1)
-            self.connection_socket, _ = self.server_socket.accept()
+            # Start a new thread to run the blocking accept call
+            thread = threading.Thread(target=self.accept_connection)
+            thread.daemon = True  # Daemon threads exit when the main program does
+            thread.start()
+
         elif protocol.lower() == "udp":
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.server_socket.bind(("localhost", port))
+
+    def accept_connection(self):
+        self.connection_socket, _ = self.server_socket.accept()
 
     def stop_server(self):
         if self.connection_socket:
@@ -708,6 +727,7 @@ def udp_auth_err(tester):
 
 @testcase
 def tcp_hello(tester):
+    tester.start_server("tcp", 4567)
     tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
 
     # Invalid command for the START state
@@ -731,27 +751,167 @@ def tcp_not_auth(tester):
     ), "Output does not match expected error message."
 
 
+@testcase
+def tcp_auth(tester):
+    tester.start_server("tcp", 4567)
+    tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
+    tester.execute("/auth a b c")
+
+    message = tester.receive_message()
+    assert (
+        message == "AUTH a AS c USING b\r\n"
+    ), "Incoming message does not match expected AUTH message."
+
+
+@testcase
+def tcp_auth_ok(tester):
+    tester.start_server("tcp", 4567)
+    tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
+    tester.execute("/auth a b c")
+
+    message = tester.receive_message()
+    assert (
+        message == "AUTH a AS c USING b\r\n"
+    ), "Incoming message does not match expected AUTH message."
+
+    tester.send_message("REPLY OK IS vsechno cajk\r\n")
+
+    sleep(0.2)
+
+    stderr = tester.get_stderr()
+    assert any(
+        ["Success: vsechno cajk" == line for line in stderr.split("\n")]
+    ), "Output does not match expected error message."
+
+
+@testcase
+def tcp_auth_nok(tester):
+    tester.start_server("tcp", 4567)
+    tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
+    tester.execute("/auth a b c")
+
+    message = tester.receive_message()
+    assert (
+        message == "AUTH a AS c USING b\r\n"
+    ), "Incoming message does not match expected AUTH message."
+
+    tester.send_message("REPLY NOK IS nic cajk\r\n")
+
+    sleep(0.2)
+
+    stderr = tester.get_stderr()
+    assert any(
+        ["Failure: nic cajk" == line for line in stderr.split("\n")]
+    ), "Output does not match expected error message."
+
+
 ### END TEST CASES ###
 
 
-def run_tests(executable_path):
+def run_tests(executable_path, udp=False, tcp=False, test_case=None):
     test_cases_passed = 0
     tester = ExecutableTester(executable_path)
-    for test in test_cases:
-        test_cases_passed += 1 if test(tester) else 0
+
+    total_cases = 0
+
+    if test_case is None:
+        # Test UDP
+        if udp:
+            total_cases += len(udp_test_cases)
+            for test in udp_test_cases:
+                test_cases_passed += 1 if test(tester) else 0
+
+        # Test TCP
+        if tcp:
+            total_cases += len(tcp_test_cases)
+            for test in tcp_test_cases:
+                test_cases_passed += 1 if test(tester) else 0
+    else:
+        test_found = False
+
+        # Find and run the specified UDP test case
+        if udp:
+            for udp_test in udp_test_cases:
+                if udp_test.__name__ == test_case:
+                    total_cases += 1
+                    test_cases_passed += 1 if udp_test(tester) else 0
+                    test_found = True
+                    break
+
+        # Find and run the specified TCP test case if it wasn't found in UDP
+        if tcp and not test_found:
+            for tcp_test in tcp_test_cases:
+                if tcp_test.__name__ == test_case:
+                    total_cases += 1
+                    test_cases_passed += 1 if tcp_test(tester) else 0
+                    test_found = True
+                    break
+
+        if not test_found:
+            print(
+                f"Error: Test case '{test_case}' not found in the specified protocol tests."
+            )
+            return
 
     cprint(
-        f"\n{'✅' if test_cases_passed == len(test_cases) else '❌'} {test_cases_passed}/{len(test_cases)} test cases passed",
-        "green" if test_cases_passed == len(test_cases) else "red",
+        f"\n{'✅' if test_cases_passed == total_cases else '❌'} {test_cases_passed}/{total_cases} test cases passed",
+        "green" if test_cases_passed == total_cases else "red",
     )
 
 
 if __name__ == "__main__":
-    if (len(sys.argv) == 2 and sys.argv[1] == "-h") or (
-        len(sys.argv) != 2 and len(sys.argv) != 3
-    ):
-        print("Usage: python test_executable.py <path_to_executable> [-d: debug]")
+    # Default settings
+    debug = False
+    udp = True
+    tcp = True
+    test_case = None
+
+    executable_path = None
+
+    if "-h" in sys.argv:
+        print(
+            "Usage: python test_executable.py <path_to_executable> [-d: debug] [-t <testcase_name>] [-p <udp|tcp>]"
+        )
+        sys.exit(0)
+
+    args = iter(sys.argv[1:])  # Skip the script name
+    for arg in args:
+        if arg == "-d":
+            debug = True
+        elif arg == "-t":
+            try:
+                test_case = next(args)  # Get the next argument as the test case name
+                if test_case not in [
+                    tc.__name__ for tc in udp_test_cases
+                ] and test_case not in [tc.__name__ for tc in tcp_test_cases]:
+                    print(f"Error: Test case '{test_case}' not recognized.")
+                    sys.exit(1)
+            except StopIteration:
+                print("Error: -t requires a test case name.")
+                sys.exit(1)
+        elif arg == "-p":
+            try:
+                protocol = next(args).lower()  # Get the next argument as the protocol
+                if protocol == "udp":
+                    tcp = False
+                elif protocol == "tcp":
+                    udp = False
+                else:
+                    print("Error: Protocol must be either 'udp' or 'tcp'.")
+                    sys.exit(1)
+            except StopIteration:
+                print("Error: -p requires a protocol name (udp or tcp).")
+                sys.exit(1)
+        else:
+            if executable_path is None:
+                executable_path = arg
+            else:
+                print("Error: Unexpected argument or executable path already set.")
+                sys.exit(1)
+
+    if executable_path is None:
+        print("Error: Path to executable is required.")
         sys.exit(1)
-    executable_path = sys.argv[1]
-    debug = len(sys.argv) == 3 and sys.argv[2] == "-d"
-    run_tests(executable_path)
+
+    # Now call run_tests with the collected options
+    run_tests(executable_path, udp=udp, tcp=tcp, test_case=test_case)
