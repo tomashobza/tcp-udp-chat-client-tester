@@ -2,8 +2,6 @@
 
 Author: **Tomáš Hobza** ([xhobza03](mailto:xhobza03@vutbr.cz)) @ FIT VUT 2024
 
-![showcase of how the tests look](showcase.png)
-
 ## 📚 Info
 
 Testing server for testing the TCP/UDP messaging client for the IPK project 01 of 2024 written in Python. Feel free to use it and modify it however you want.
@@ -26,3 +24,5 @@ You might need to install `termcolor` if you don't have it yet using `pip3 insta
 ## ⚖️ License
 
 See [LICENSE](LICENSE).
+
+![showcase of how the tests look](showcase.png)
