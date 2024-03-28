@@ -1002,6 +1002,9 @@ def tcp_server_err1(tester):
     tester.start_server("tcp", 4567)
     tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
 
+    # Execute AUTH command
+    tester.execute("/auth a b c")
+
     # Send a message from the server
     tester.send_message("ERR FROM jetovp IS rdeli\r\n")
 
