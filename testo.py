@@ -9,6 +9,8 @@ from time import sleep
 import signal
 import socket
 import select
+import os
+import pty
 
 global debug
 global run_tcp
@@ -110,6 +112,8 @@ class ExecutableTester:
     def setup(self, args=["-t", "udp", "-s", "localhost", "-p", "4567"]):
         if self.process:
             self.teardown()
+
+        master, slave = pty.openpty()  # Open a pseudo-terminal pair
         self.process = subprocess.Popen(
             [self.executable_path] + args,
             stdin=subprocess.PIPE,
@@ -118,7 +122,10 @@ class ExecutableTester:
             text=True,
             bufsize=1,  # Line buffered
         )
-        self._start_thread(self.read_stdout, self.stdout_queue)
+        os.close(slave)  # Close the slave fd, the subprocess will write to it
+
+        self.stdout_fd = master  # Use the master for reading output
+        self._start_thread(self.buffer_stdout_fd, self.stdout_queue)
         self._start_thread(self.read_stderr, self.stderr_queue)
         self.return_code = None
 
@@ -128,6 +135,19 @@ class ExecutableTester:
         thread = threading.Thread(target=target, args=(queue,))
         thread.daemon = True  # Thread dies with the program
         thread.start()
+
+    def buffer_stdout_fd(self, queue):
+        while True:
+            if self.process and self.process.poll() is not None:
+                break  # Subprocess has terminated, exit the loop
+            try:
+                line = os.read(self.stdout_fd, 1024).decode("utf-8")
+                if line:
+                    print(colored("STDOUT: " + line.strip(), "blue"))
+                    queue.put(line.strip())
+            except OSError as e:
+                print(f"Error reading from pty: {e}")
+                break
 
     def read_stdout(self, queue):
         for line in iter(self.process.stdout.readline, ""):
