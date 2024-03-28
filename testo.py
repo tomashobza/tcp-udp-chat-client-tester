@@ -550,6 +550,13 @@ def udp_server_err1(tester):
     tester.start_server("udp", 4567)
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
 
+    tester.execute("/auth a b c")
+
+    sleep(0.2)
+
+    # Send CONFIRM message
+    tester.send_message(b"\x00\x00\x00")
+
     # Send a message from the server
     tester.send_message(b"\xfe\x00\x00server\x00chyba\x00")
 
@@ -609,6 +616,9 @@ def udp_join_ok(tester):
     assert (
         message == b"\x03\x00\x01channel\x00user\x00"
     ), "Incoming message does not match expected JOIN message."
+
+    # Send CONFIRM message
+    tester.send_message(b"\x00\x00\x01")
 
     # Send REPLY message
     tester.send_message(b"\x01\x00\x01\x01\x00\x01jojo\x00")
