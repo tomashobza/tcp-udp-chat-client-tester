@@ -120,7 +120,7 @@ class ExecutableTester:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            bufsize=1,  # Line buffered
+            bufsize=0,  # Line buffered
         )
         os.close(slave)  # Close the slave fd, the subprocess will write to it
 
@@ -568,10 +568,14 @@ def udp_server_err1(tester):
     tester.start_server("udp", 4567)
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
 
+    tester.execute("/auth a b c")
+
+    sleep(0.2)
+
     # Send a message from the server
     tester.send_message(b"\xfe\x00\x00server\x00chyba\x00")
 
-    sleep(0.4)
+    sleep(0.2)
 
     stderr = tester.get_stderr()
     assert any(
@@ -1006,7 +1010,7 @@ def tcp_bye3(tester):
 
 
 @testcase
-def udp_server_err1(tester):
+def tcp_server_err1(tester):
     tester.start_server("tcp", 4567)
     tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
 
