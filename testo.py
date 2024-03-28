@@ -110,13 +110,15 @@ class ExecutableTester:
     def setup(self, args=["-t", "udp", "-s", "localhost", "-p", "4567"]):
         if self.process:
             self.teardown()
+        self.stdout_queue = queue.Queue()
+        self.stderr_queue = queue.Queue()
         self.process = subprocess.Popen(
             [self.executable_path] + args,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            bufsize=1,  # Line buffered
+            bufsize=0,  # Line buffered
         )
         self._start_thread(self.read_stdout, self.stdout_queue)
         self._start_thread(self.read_stderr, self.stderr_queue)
