@@ -6,3 +6,5 @@
 !LICENSE
 !.gitignore
 !*.png
+!UDPTranslator.py
+!UDPMessages.py

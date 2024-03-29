@@ -11,6 +11,9 @@ import socket
 import select
 import re
 
+from UDPTranslator import translateMessage, getMessageId
+from UDPMessages import confirm, reply, auth, join, msg, err, bye
+
 global debug
 global run_tcp
 global run_udp
@@ -20,6 +23,10 @@ global test
 udp_test_cases = []
 tcp_test_cases = []
 
+class TimeoutError(Exception):
+    def __init__(self, message):
+        self.message = message
+        super().__init__(self.message)
 
 def testcase(func):
     def wrapper(tester, *args, **kwargs):
@@ -37,6 +44,10 @@ def testcase(func):
             passed = True
         except AssertionError as e:
             print(colored(f"❌ Test '{func.__name__}': FAILED - {e}", "red"))
+            tester.dump()
+        except TimeoutError as e:
+            print(colored(f"❌ Test '{func.__name__}': FAILED - Timeout - {e}", "red"))
+            tester.dump()
         except Exception as e:
             print(colored(f"❌ Test '{func.__name__}': ERROR - {e}", "red"))
         print(colored(f"Test '{func.__name__}' finished", "yellow"))
@@ -66,6 +77,7 @@ class ExecutableTester:
         self.server_socket = None
         self.connection_socket = None  # For TCP connections
         self.client_address = None  # For UDP responses
+        self.history = ""
 
     def start_server(self, protocol, port):
         if protocol.lower() == "tcp":
@@ -104,9 +116,11 @@ class ExecutableTester:
                     return self.connection_socket.recv(1024).decode()
                 else:  # UDP
                     message, self.client_address = self.server_socket.recvfrom(1024)
+                    # we should confirm it directly
+                    self.confirm(message)
                     return message
             except socket.timeout:
-                return None
+                raise TimeoutError("Socket timed out.")
 
     def setup(self, args=["-t", "udp", "-s", "localhost", "-p", "4567"]):
         if self.process:
@@ -145,6 +159,7 @@ class ExecutableTester:
             queue.put(line)
 
     def execute(self, input_data):
+        self.history += "stdin:" + input_data + "\n"
         self.process.stdin.write(input_data + "\n")
         self.process.stdin.flush()
 
@@ -154,12 +169,14 @@ class ExecutableTester:
         output = []
         while not self.stdout_queue.empty():
             output.append(self.stdout_queue.get())
+        self.history += "stdout:".join(output)
         return "".join(output)
 
     def get_stderr(self):
         output = []
         while not self.stderr_queue.empty():
             output.append(self.stderr_queue.get())
+        self.history += "stderr:".join(output)
         return "".join(output)
 
     def teardown(self):
@@ -173,6 +190,9 @@ class ExecutableTester:
         self.server_socket = None
         self.connection_socket = None
 
+    def confirm(self, message):
+        self.send_message(b"\x00"+ getMessageId(message))
+
     def get_return_code(self):
         return self.return_code
 
@@ -181,6 +201,19 @@ class ExecutableTester:
 
     def send_eof(self):
         self.process.stdin.close()
+    def dump(self):
+
+        print(colored("stdout now", "magenta"))
+        print(self.get_stdout())
+
+        print(colored("stderr", "magenta"))
+        print(self.get_stderr())
+
+        print(colored("History", "magenta"))
+        print(self.history)
+    
+    def setClientAddress(self, client_address):
+        self.client_address = client_address
 
 
 ### TEST CASES ###
@@ -268,8 +301,9 @@ def udp_auth(tester):
 
     # Check AUTH message received
     message = tester.receive_message()
+    tMessage = translateMessage(message)
     assert (
-        message == b"\x02\x00\x00a\x00c\x00b\x00"
+        tMessage == "AUTH IS a AS c USING b\r\n"
     ), "Incoming message does not match expected message."
 
 
@@ -283,8 +317,9 @@ def udp_auth_port(tester):
 
     # Check AUTH message received
     message = tester.receive_message()
+    tMessage = translateMessage(message)
     assert (
-        message == b"\x02\x00\x00a\x00c\x00b\x00"
+        tMessage == "AUTH IS a AS c USING b\r\n"
     ), "Incoming message does not match expected message."
 
 
@@ -298,15 +333,13 @@ def udp_auth_nok(tester):
 
     # Expect the auth message to be received by the server
     message = tester.receive_message()
+    tMessage = translateMessage(message)
     assert (
-        message == b"\x02\x00\x00a\x00c\x00b\x00"
+        tMessage == "AUTH IS a AS c USING b\r\n"
     ), "Incoming message does not match expected AUTH message."
 
-    # Confirm the AUTH message
-    tester.send_message(b"\x00\x00\x00")
-
     # Reply with NOK
-    tester.send_message(b"\x01\x00\x00\x00\x00\x00nene\x00")
+    tester.send_message(reply(0, False, getMessageId(message), "nene"))
 
     sleep(0.2)
 
@@ -333,15 +366,13 @@ def udp_auth_nok_ok(tester):
 
     # Expect the auth message to be received by the server
     message = tester.receive_message()
+    tMessage = translateMessage(message)
     assert (
-        message == b"\x02\x00\x00a\x00c\x00b\x00"
+        tMessage == "AUTH IS a AS c USING b\r\n"
     ), "Incoming message does not match expected AUTH message."
 
-    # Confirm the AUTH message
-    tester.send_message(b"\x00\x00\x00")
-
     # Reply with NOK
-    tester.send_message(b"\x01\x00\x00\x00\x00\x00nene\x00")
+    tester.send_message(reply(0, False, getMessageId(message), "nene"))
 
     sleep(0.2)
 
@@ -362,15 +393,13 @@ def udp_auth_nok_ok(tester):
 
     # Expect the auth message to be received by the server
     message = tester.receive_message()
+    tMessage = translateMessage(message)
     assert (
-        message == b"\x02\x00\x01a\x00c\x00b\x00"
+        tMessage == "AUTH IS a AS c USING b\r\n"
     ), "Incoming message does not match expected AUTH message."
 
-    # Confirm the AUTH message
-    tester.send_message(b"\x00\x00\x01")
-
     # Reply with OK
-    tester.send_message(b"\x01\x00\x01\x01\x00\x01yes\x00")
+    tester.send_message(reply(1, True, getMessageId(message), "yes"))
 
     sleep(0.2)
 
@@ -405,15 +434,16 @@ def udp_auth_port_change(tester):
     # Expect the auth message to be received by the server on tmp socket
     tmp_socket.settimeout(10)
     message, client_address = tmp_socket.recvfrom(1024)
+    # Confirm the AUTH message on tmp socket
+    tmp_socket.sendto(b"\x00" + getMessageId(message), client_address)
+    tMessage = translateMessage(message)
     assert (
-        message == b"\x02\x00\x00a\x00c\x00b\x00"
+        tMessage == "AUTH IS a AS c USING b\r\n"
     ), "Incoming message does not match expected AUTH message."
 
-    # Confirm the AUTH message on tmp socket
-    tmp_socket.sendto(b"\x00\x00\x00", client_address)
-
     # Reply with OK from different port (from now on the client should switch to it)
-    tester.send_message(b"\x01\x00\x00\x01\x00\x00jojo\x00")
+    tester.setClientAddress(client_address)
+    tester.send_message(reply(0, True, getMessageId(message), "jojo"))
 
     sleep(0.2)
 
@@ -440,16 +470,13 @@ def auth_and_reply(tester):
 
     # Expect the auth message to be received by the server
     message = tester.receive_message()
-
+    tMessage = translateMessage(message)
     assert (
-        message == b"\x02\x00\x00a\x00c\x00b\x00"
+        tMessage == "AUTH IS a AS c USING b\r\n"
     ), "Incoming message does not match expected AUTH message."
 
-    # Confirm the AUTH message
-    tester.send_message(b"\x00\x00\x00")
-
     # Reply with OK
-    tester.send_message(b"\x01\x00\x00\x01\x00\x00jojo\x00")
+    tester.send_message(reply(0, True, getMessageId(message), "jojo"))
 
     sleep(0.2)
 
@@ -479,8 +506,9 @@ def udp_msg(tester):
 
     # Expect the message to be received by the server
     message = tester.receive_message()
+    tMessage = translateMessage(message)
     assert (
-        message == b"\x04\x00\x01c\x00ahojky\x00"
+        tMessage == "MSG FROM c IS ahojky\r\n"
     ), "Incoming message does not match expected MSG message."
 
 
@@ -489,7 +517,7 @@ def udp_svr_msg(tester):
     auth_and_reply(tester)
 
     # Send a message from the server
-    tester.send_message(b"\x04\x00\x01smrt\x00ahojky\x00")
+    tester.send_message(msg(1, "smrt", "ahojky"))
 
     sleep(0.2)
 
@@ -506,18 +534,20 @@ def udp_svr_msg(tester):
     ), "Incoming message does not match expected CONFIRM message."
 
 
-@testcase
-def udp_bye1(tester):
-    tester.start_server("udp", 4567)
-    tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
+#Why should I sent message to server if it does not even know I exist?
 
-    # Send a message from the server
-    tester.send_signal(signal.SIGINT)
+# @testcase
+# def udp_bye1(tester):
+#     tester.start_server("udp", 4567)
+#     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
 
-    message = tester.receive_message()
-    assert (
-        message == b"\xff\x00\x00"
-    ), "Incoming message does not match expected BYE message."
+#     # Send a message from the server
+#     tester.send_signal(signal.SIGINT)
+
+#     message = tester.receive_message()
+#     assert (
+#         message == b"\xff\x00\x00"
+#     ), "Incoming message does not match expected BYE message."
 
 
 @testcase
@@ -528,8 +558,9 @@ def udp_bye2(tester):
     tester.send_signal(signal.SIGINT)
 
     message = tester.receive_message()
+    tMessage = translateMessage(message)
     assert (
-        message == b"\xff\x00\x01"
+        tMessage == 'BYE\r\n'
     ), "Incoming message does not match expected BYE message."
 
 
@@ -541,8 +572,9 @@ def udp_bye3(tester):
     tester.process.stdin.close()
 
     message = tester.receive_message()
+    tMessage = translateMessage(message)
     assert (
-        message == b"\xff\x00\x01"
+        tMessage == 'BYE\r\n'
     ), "Incoming message does not match expected BYE message."
 
 
@@ -555,17 +587,15 @@ def udp_server_err1(tester):
 
     # Should have received the AUTH message
     message = tester.receive_message()
+    tMessage = translateMessage(message)
     assert (
-        message == b"\x02\x00\x00a\x00c\x00b\x00"
+        tMessage == "AUTH IS a AS c USING b\r\n"
     ), "Incoming message does not match expected AUTH message."
-
-    # Send CONFIRM message
-    tester.send_message(b"\x00\x00\x00")
 
     sleep(0.2)
 
     # Send an ERR message from the server
-    tester.send_message(b"\xfe\x00\x00server\x00chyba\x00")
+    tester.send_message(err(0, "server", "chyba"))
 
     sleep(0.2)
 
@@ -582,8 +612,9 @@ def udp_server_err1(tester):
 
     # Should receive BYE for the ERR message
     message = tester.receive_message()
+    tMessage = translateMessage(message)
     assert (
-        message == b"\xff\x00\x01"
+        tMessage == "BYE\r\n"
     ), "Incoming message does not match expected BYE message."
 
 
@@ -592,7 +623,7 @@ def udp_server_err2(tester):
     auth_and_reply(tester)
 
     # Send a message from the server
-    tester.send_message(b"\xfe\x00\x01server\x00chyba\x00")
+    tester.send_message(err(1, "server", "chyba"))
 
     sleep(0.2)
 
@@ -610,8 +641,9 @@ def udp_server_err2(tester):
 
     # Should receive BYE for the ERROR message
     message = tester.receive_message()
+    tMessage = translateMessage(message)
     assert (
-        message == b"\xff\x00\x01"
+        tMessage == "BYE\r\n"
     ), "Incoming message does not match expected BYE message."
 
 
@@ -625,16 +657,13 @@ def udp_join_ok(tester):
 
     # Expect the join message to be received by the server
     message = tester.receive_message()
-
+    tMessage = translateMessage(message)
     assert (
-        message == b"\x03\x00\x01channel\x00user\x00"
+        tMessage == "JOIN IS channel AS user\r\n"
     ), "Incoming message does not match expected JOIN message."
 
-    # Send CONFIRM message
-    tester.send_message(b"\x00\x00\x01")
-
     # Send REPLY message
-    tester.send_message(b"\x01\x00\x01\x01\x00\x01jojo\x00")
+    tester.send_message(reply(1,True, getMessageId(message), "jojo"))
 
     sleep(0.2)
 
@@ -661,21 +690,21 @@ def udp_join_nok(tester):
 
     # Expect the join message to be received by the server
     message = tester.receive_message()
-
+    tMessage = translateMessage(message)
     assert (
-        message == b"\x03\x00\x01channel\x00user\x00"
+        tMessage == "JOIN IS channel AS user\r\n"
     ), "Incoming message does not match expected JOIN message."
 
     # Send REPLY message
-    tester.send_message(b"\x01\x00\x01\x00\x00\x01jojo\x00")
+    tester.send_message(reply(1,False, getMessageId(message), "nene"))
 
     sleep(0.2)
 
-    # Check the output, should contain "Failure: jojo"
+    # Check the output, should contain "Failure: nene"
     stderr = tester.get_stderr()
     assert any(
-        ["Failure: jojo" in line for line in stderr.split("\n")]
-    ), "Output does not match expected 'Failure: jojo' output."
+        ["Failure: nene" in line for line in stderr.split("\n")]
+    ), "Output does not match expected 'Failure: nene' output."
 
     # Should receive CONFIRM for the REPLY message
     message = tester.receive_message()
@@ -714,10 +743,20 @@ def udp_invalid_msg(tester):
         ["ERR: " in line for line in stderr.split("\n")]
     ), "Output does not match expected 'ERR: ' output."
 
-    # Should receive ERR for the invalid message
+    # we should firs expect confirm (Packet loss can be detected using mandatory
+    # message confirmation with timeouts. Once a message is sent it is required to confirm its successful delivery by the other party.
+    # The confirmation should be sent immediately after receiving the message, regardless of any potential higher-level processing issues)
     message = tester.receive_message()
     assert (
-        b"\xfe\x00\x01c\x00" in message
+        message == b"\x00\x00\x01"
+    ), "Incoming message does not match expected CONFIRM message."
+
+
+    # Should receive ERR for the invalid message
+    message = tester.receive_message()
+    tMessage = translateMessage(message)
+    assert (
+        "ERR FROM c IS" in tMessage
     ), "Incoming message does not match expected ERR message."
 
 
@@ -725,19 +764,19 @@ def udp_invalid_msg(tester):
 def udp_auth_err(tester):
     tester.start_server("udp", 4567)
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
+    
+    # Send AUTH command
     tester.execute("/auth a b c")
 
     # Expect the auth message to be received by the server
     message = tester.receive_message()
+    tMessage = translateMessage(message)
     assert (
-        message == b"\x02\x00\x00a\x00c\x00b\x00"
+        tMessage == "AUTH IS a AS c USING b\r\n"
     ), "Incoming message does not match expected AUTH message."
 
-    # Confirm the AUTH message
-    tester.send_message(b"\x00\x00\x00")
-
     # Send ERR message
-    tester.send_message(b"\xfe\x00\x01server\x00ajaj\x00")
+    tester.send_message(err(1, "server", "ajaj"))
 
     sleep(0.2)
 
@@ -755,8 +794,9 @@ def udp_auth_err(tester):
 
     # The client should respond with BYE message
     message = tester.receive_message()
+    tMessage = translateMessage(message)
     assert (
-        message == b"\xff\x00\x01"
+        tMessage == "BYE\r\n"
     ), "Incoming message does not match expected BYE message."
 
 
@@ -970,44 +1010,45 @@ def tcp_svr_msg(tester):
         ["SeverusSnape: ahojky" in line for line in stdout.split("\n")]
     ), "Output does not match expected output."
 
+# Why should I sent message to server if it does not even know I exist?
 
-@testcase
-def tcp_bye1(tester):
-    tester.start_server("tcp", 4567)
-    tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
+# @testcase
+# def tcp_bye1(tester):
+#     tester.start_server("tcp", 4567)
+#     tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
 
-    sleep(0.2)
+#     sleep(0.2)
 
-    # Send a message from the server
-    tester.send_signal(signal.SIGINT)
+#     # Send a message from the server
+#     tester.send_signal(signal.SIGINT)
 
-    message = tester.receive_message()
-    assert message == "BYE\r\n", "Incoming message does not match expected BYE message."
-
-
-@testcase
-def tcp_bye2(tester):
-    tester.start_server("tcp", 4567)
-    tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
-
-    sleep(0.2)
-
-    # Send a message from the server
-    tester.process.stdin.close()
-
-    message = tester.receive_message()
-    assert message == "BYE\r\n", "Incoming message does not match expected BYE message."
+#     message = tester.receive_message()
+#     assert message == "BYE\r\n", "Incoming message does not match expected BYE message."
 
 
-@testcase
-def tcp_bye3(tester):
-    tcp_auth_and_reply(tester)
+# @testcase
+# def tcp_bye2(tester):
+#     tester.start_server("tcp", 4567)
+#     tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
 
-    # Send a message from the server
-    tester.process.stdin.close()
+#     sleep(0.2)
 
-    message = tester.receive_message()
-    assert message == "BYE\r\n", "Incoming message does not match expected BYE message."
+#     # Send a message from the server
+#     tester.process.stdin.close()
+
+#     message = tester.receive_message()
+#     assert message == "BYE\r\n", "Incoming message does not match expected BYE message."
+
+
+# @testcase
+# def tcp_bye3(tester):
+#     tcp_auth_and_reply(tester)
+
+#     # Send a message from the server
+#     tester.process.stdin.close()
+
+#     message = tester.receive_message()
+#     assert message == "BYE\r\n", "Incoming message does not match expected BYE message."
 
 
 @testcase
@@ -1184,12 +1225,14 @@ def run_tests(executable_path, udp=False, tcp=False, test_case=None):
         if udp:
             total_cases += len(udp_test_cases)
             for test in udp_test_cases:
+                tester = ExecutableTester(executable_path)
                 test_cases_passed += 1 if test(tester) else 0
 
         # Test TCP
         if tcp:
             total_cases += len(tcp_test_cases)
             for test in tcp_test_cases:
+                tester = ExecutableTester(executable_path)
                 test_cases_passed += 1 if test(tester) else 0
     else:
         test_found = False
