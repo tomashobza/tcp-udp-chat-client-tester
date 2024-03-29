@@ -413,6 +413,7 @@ def udp_auth_port_change(tester):
     tmp_socket.sendto(b"\x00\x00\x00", client_address)
 
     # Reply with OK from different port (from now on the client should switch to it)
+    tester.client_address = client_address
     tester.send_message(b"\x01\x00\x00\x01\x00\x00jojo\x00")
 
     sleep(0.2)
