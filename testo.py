@@ -25,10 +25,12 @@ global test
 udp_test_cases = []
 tcp_test_cases = []
 
+
 class TimeoutError(Exception):
     def __init__(self, message):
         self.message = message
         super().__init__(self.message)
+
 
 def testcase(func):
     def wrapper(tester, *args, **kwargs):
@@ -193,7 +195,7 @@ class ExecutableTester:
         self.connection_socket = None
 
     def confirm(self, message):
-        self.send_message(b"\x00"+ getMessageId(message))
+        self.send_message(b"\x00" + getMessageId(message))
 
     def get_return_code(self):
         return self.return_code
@@ -203,6 +205,7 @@ class ExecutableTester:
 
     def send_eof(self):
         self.process.stdin.close()
+
     def dump(self):
 
         print(colored("stdout now", "magenta"))
@@ -213,7 +216,7 @@ class ExecutableTester:
 
         print(colored("History", "magenta"))
         print(self.history)
-    
+
     def setClientAddress(self, client_address):
         self.client_address = client_address
 
@@ -536,7 +539,7 @@ def udp_svr_msg(tester):
     ), "Incoming message does not match expected CONFIRM message."
 
 
-#Why should I sent message to server if it does not even know I exist?
+# Why should I sent message to server if it does not even know I exist?
 
 # @testcase
 # def udp_bye1(tester):
@@ -562,7 +565,7 @@ def udp_bye2(tester):
     message = tester.receive_message()
     tMessage = translateMessage(message)
     assert (
-        tMessage == 'BYE\r\n'
+        tMessage == "BYE\r\n"
     ), "Incoming message does not match expected BYE message."
 
 
@@ -576,7 +579,7 @@ def udp_bye3(tester):
     message = tester.receive_message()
     tMessage = translateMessage(message)
     assert (
-        tMessage == 'BYE\r\n'
+        tMessage == "BYE\r\n"
     ), "Incoming message does not match expected BYE message."
 
 
@@ -665,7 +668,7 @@ def udp_join_ok(tester):
     ), "Incoming message does not match expected JOIN message."
 
     # Send REPLY message
-    tester.send_message(reply(1,True, getMessageId(message), "jojo"))
+    tester.send_message(reply(1, True, getMessageId(message), "jojo"))
 
     sleep(0.2)
 
@@ -698,7 +701,7 @@ def udp_join_nok(tester):
     ), "Incoming message does not match expected JOIN message."
 
     # Send REPLY message
-    tester.send_message(reply(1,False, getMessageId(message), "nene"))
+    tester.send_message(reply(1, False, getMessageId(message), "nene"))
 
     sleep(0.2)
 
@@ -753,7 +756,6 @@ def udp_invalid_msg(tester):
         message == b"\x00\x00\x01"
     ), "Incoming message does not match expected CONFIRM message."
 
-
     # Should receive ERR for the invalid message
     message = tester.receive_message()
     tMessage = translateMessage(message)
@@ -766,7 +768,7 @@ def udp_invalid_msg(tester):
 def udp_auth_err(tester):
     tester.start_server("udp", 4567)
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
-    
+
     # Send AUTH command
     tester.execute("/auth a b c")
 
@@ -903,8 +905,8 @@ def tcp_auth_nok(tester):
 
 @testcase
 def tcp_auth_port(tester):
-    tester.start_server("tcp", 1234)
-    tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "1234"])
+    tester.start_server("tcp", 4321)
+    tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4321"])
 
     # Send AUTH command
     tester.execute("/auth a b c")
@@ -1011,6 +1013,7 @@ def tcp_svr_msg(tester):
     assert any(
         ["SeverusSnape: ahojky" in line for line in stdout.split("\n")]
     ), "Output does not match expected output."
+
 
 # Why should I sent message to server if it does not even know I exist?
 
