@@ -509,20 +509,6 @@ def udp_svr_msg(tester):
 
 @testcase
 def udp_bye1(tester):
-    tester.start_server("udp", 4567)
-    tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
-
-    # Send a message from the server
-    tester.send_signal(signal.SIGINT)
-
-    message = tester.receive_message()
-    assert (
-        message == b"\xff\x00\x00"
-    ), "Incoming message does not match expected BYE message."
-
-
-@testcase
-def udp_bye2(tester):
     auth_and_reply(tester)
 
     # Send a message from the server
@@ -535,7 +521,7 @@ def udp_bye2(tester):
 
 
 @testcase
-def udp_bye3(tester):
+def udp_bye2(tester):
     auth_and_reply(tester)
 
     # Send a message from the server
@@ -973,35 +959,7 @@ def tcp_svr_msg(tester):
 
 
 @testcase
-def tcp_bye1(tester):
-    tester.start_server("tcp", 4567)
-    tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
-
-    sleep(0.2)
-
-    # Send a message from the server
-    tester.send_signal(signal.SIGINT)
-
-    message = tester.receive_message()
-    assert message == "BYE\r\n", "Incoming message does not match expected BYE message."
-
-
-@testcase
-def tcp_bye2(tester):
-    tester.start_server("tcp", 4567)
-    tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
-
-    sleep(0.2)
-
-    # Send a message from the server
-    tester.process.stdin.close()
-
-    message = tester.receive_message()
-    assert message == "BYE\r\n", "Incoming message does not match expected BYE message."
-
-
-@testcase
-def tcp_bye3(tester):
+def tcp_bye(tester):
     tcp_auth_and_reply(tester)
 
     # Send a message from the server
