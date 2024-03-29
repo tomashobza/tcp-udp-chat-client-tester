@@ -9,6 +9,7 @@ from time import sleep
 import signal
 import socket
 import select
+import re
 
 global debug
 global run_tcp
@@ -552,26 +553,38 @@ def udp_server_err1(tester):
 
     tester.execute("/auth a b c")
 
-    sleep(0.2)
+    # Should have received the AUTH message
+    message = tester.receive_message()
+    assert (
+        message == b"\x02\x00\x00a\x00c\x00b\x00"
+    ), "Incoming message does not match expected AUTH message."
 
     # Send CONFIRM message
     tester.send_message(b"\x00\x00\x00")
 
-    # Send a message from the server
+    sleep(0.2)
+
+    # Send an ERR message from the server
     tester.send_message(b"\xfe\x00\x00server\x00chyba\x00")
 
-    sleep(0.4)
+    sleep(0.2)
 
     stderr = tester.get_stderr()
     assert any(
         ["ERR FROM server: chyba" in line for line in stderr.split("\n")]
     ), "Output does not match expected error message."
 
-    # Should receive CONFIRM for the MSG message
+    # Should receive CONFIRM for the ERR message
     message = tester.receive_message()
     assert (
         message == b"\x00\x00\x00"
     ), "Incoming message does not match expected CONFIRM message."
+
+    # Should receive BYE for the ERR message
+    message = tester.receive_message()
+    assert (
+        message == b"\xff\x00\x01"
+    ), "Incoming message does not match expected BYE message."
 
 
 @testcase
@@ -1112,6 +1125,21 @@ def tcp_invalid_msg(tester):
     assert any(
         ["ERR: " in line for line in stderr.split("\n")]
     ), "Output does not match expected 'ERR: ' output."
+
+    # Client should respond with ERR message
+    message = tester.receive_message()
+    assert re.match(
+        r"ERR FROM c IS [ -~]+\r\n", message
+    ), "Incoming message does not match expected ERR message."
+
+    # Send EOF to client stdin
+    tester.process.stdin.close()
+
+    sleep(0.2)
+
+    # Client should respond with BYE message
+    message = tester.receive_message()
+    assert message == "BYE\r\n", "Incoming message does not match expected ERR message."
 
 
 @testcase
