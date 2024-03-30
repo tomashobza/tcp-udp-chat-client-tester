@@ -82,10 +82,14 @@ class ExecutableTester:
         self.connection_socket = None  # For TCP connections
         self.client_address = None  # For UDP responses
         self.history = ""
+        self.accept_thread = None  # Keep track of the thread accepting connections
 
     def start_server(self, protocol, port):
         if protocol.lower() == "tcp":
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.server_socket.setsockopt(
+                socket.SOL_SOCKET, socket.SO_REUSEADDR, 1
+            )  # Set SO_REUSEADDR
             self.server_socket.bind(("localhost", port))
             self.server_socket.listen(1)
             # Start a new thread to run the blocking accept call
@@ -105,6 +109,8 @@ class ExecutableTester:
             self.connection_socket.close()
         if self.server_socket:
             self.server_socket.close()
+        if self.accept_thread:  # Ensure the accept thread has finished
+            self.accept_thread.join()
 
     def send_message(self, message):
         if self.connection_socket:  # TCP

@@ -5,23 +5,27 @@ MESSAGE_TYPES = {
     0x03: "JOIN",
     0x04: "MSG",
     0xFE: "ERR",
-    0xFF: "BYE"
+    0xFF: "BYE",
 }
+
 
 def getMessageId(data):
     pointer = 1  # Start after the message type byte
     message_id, pointer = read_bytes(data, pointer, 2)
     return message_id
 
+
 def read_byte(data, pointer):
     byte = data[pointer]
     pointer += 1
     return byte, pointer
 
+
 def read_bytes(data, pointer, num_bytes):
-    bytes_read = data[pointer:pointer + num_bytes]
+    bytes_read = data[pointer : pointer + num_bytes]
     pointer += num_bytes
     return bytes_read, pointer
+
 
 def read_variable_length_string(data, pointer):
     string = b""
@@ -31,6 +35,7 @@ def read_variable_length_string(data, pointer):
             break
         string += bytes([byte])
     return string.decode(), pointer
+
 
 def translateMessage(data):
     pointer = 0
@@ -54,22 +59,22 @@ def translateMessage(data):
         username, pointer = read_variable_length_string(data, pointer)
         display_name, pointer = read_variable_length_string(data, pointer)
         secret, pointer = read_variable_length_string(data, pointer)
-        return f'AUTH IS {username} AS {display_name} USING {secret}\r\n'
+        return f"AUTH IS {username} AS {display_name} USING {secret}\r\n"
 
     elif message_type == 0x03:  # JOIN
         channel_id, pointer = read_variable_length_string(data, pointer)
         display_name, pointer = read_variable_length_string(data, pointer)
-        return f'JOIN IS {channel_id} AS {display_name}\r\n'
+        return f"JOIN IS {channel_id} AS {display_name}\r\n"
 
     elif message_type == 0x04:  # MSG
         display_name, pointer = read_variable_length_string(data, pointer)
         message_contents, pointer = read_variable_length_string(data, pointer)
-        return f'MSG FROM {display_name} IS {message_contents}\r\n'
+        return f"MSG FROM {display_name} IS {message_contents}\r\n"
 
     elif message_type == 0xFE:  # ERR
         display_name, pointer = read_variable_length_string(data, pointer)
         message_contents, pointer = read_variable_length_string(data, pointer)
-        return f'ERR FROM {display_name} IS {message_contents}\r\n'
+        return f"ERR FROM {display_name} IS {message_contents}\r\n"
 
     elif message_type == 0xFF:  # BYE
-        return 'BYE\r\n'
+        return "BYE\r\n"
