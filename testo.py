@@ -152,9 +152,6 @@ class ExecutableTester:
                 bufsize=0,  # Set small buffer size
             )
 
-            os.close(slave)  # Close the slave fd, the subprocess will write to it
-            self.stdout_fd = master  # Use the master for reading output
-
             self._start_thread(self.read_stdout, self.stdout_queue)
             self._start_thread(self.read_stderr, self.stderr_queue)
         elif platform == "darwin":
