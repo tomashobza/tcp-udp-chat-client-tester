@@ -144,12 +144,11 @@ class ExecutableTester:
         if platform == "linux" or platform == "linux2":
 
             self.process = subprocess.Popen(
-                [self.executable_path] + args,
+                ["stdbuf", "-o0",self.executable_path] + args,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                bufsize=0,  # Set small buffer size
             )
 
             self._start_thread(self.read_stdout, self.stdout_queue)
@@ -1240,6 +1239,7 @@ def run_tests(executable_path, udp=False, tcp=False, test_case=None):
             for test in tcp_test_cases:
                 tester = ExecutableTester(executable_path)
                 test_cases_passed += 1 if test(tester) else 0
+
     else:
         test_found = False
 
