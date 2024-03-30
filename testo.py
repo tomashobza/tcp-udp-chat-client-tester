@@ -518,7 +518,6 @@ def auth_and_reply(tester):
 
     # Check the output, should contain "Success: jojo"
     stderr = tester.get_stderr()
-    print([line for line in stderr.split("\n")])
     assert any(
         ["Success: jojo" in line for line in stderr.split("\n")]
     ), "Output does not match expected 'Success: jojo' output."
