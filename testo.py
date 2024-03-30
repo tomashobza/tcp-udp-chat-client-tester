@@ -8,6 +8,7 @@ import math
 from os import get_terminal_size
 from termcolor import colored, cprint
 from time import sleep
+from sys import platform
 import signal
 import socket
 import select
@@ -154,7 +155,10 @@ class ExecutableTester:
         os.close(slave)  # Close the slave fd, the subprocess will write to it
         self.stdout_fd = master  # Use the master for reading output
 
-        self._start_thread(self.buffer_stdout_fd, self.stdout_queue)
+        if platform == "linux" or platform == "linux2":
+            self._start_thread(self.read_stdout, self.stdout_queue)
+        elif platform == "darwin":
+            self._start_thread(self.buffer_stdout_fd, self.stdout_queue)
         self._start_thread(self.read_stderr, self.stderr_queue)
         self.return_code = None
 
