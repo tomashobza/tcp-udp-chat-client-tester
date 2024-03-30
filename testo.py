@@ -141,25 +141,40 @@ class ExecutableTester:
         self.stdout_queue = queue.Queue()
         self.stderr_queue = queue.Queue()
 
-        master, slave = pty.openpty()  # Open a pseudo-terminal pair
-
-        self.process = subprocess.Popen(
-            [self.executable_path] + args,
-            stdin=subprocess.PIPE,
-            stdout=slave,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=0,  # Set small buffer size
-        )
-
-        os.close(slave)  # Close the slave fd, the subprocess will write to it
-        self.stdout_fd = master  # Use the master for reading output
-
         if platform == "linux" or platform == "linux2":
+
+            self.process = subprocess.Popen(
+                [self.executable_path] + args,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=0,  # Set small buffer size
+            )
+
+            os.close(slave)  # Close the slave fd, the subprocess will write to it
+            self.stdout_fd = master  # Use the master for reading output
+
             self._start_thread(self.read_stdout, self.stdout_queue)
+            self._start_thread(self.read_stderr, self.stderr_queue)
         elif platform == "darwin":
+            master, slave = pty.openpty()  # Open a pseudo-terminal pair
+
+            self.process = subprocess.Popen(
+                [self.executable_path] + args,
+                stdin=subprocess.PIPE,
+                stdout=slave,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=0,  # Set small buffer size
+            )
+
+            os.close(slave)  # Close the slave fd, the subprocess will write to it
+            self.stdout_fd = master  # Use the master for reading output
+
             self._start_thread(self.buffer_stdout_fd, self.stdout_queue)
-        self._start_thread(self.read_stderr, self.stderr_queue)
+            self._start_thread(self.read_stderr, self.stderr_queue)
+
         self.return_code = None
 
         sleep(0.2)  # Give some time for the process to start
