@@ -12,6 +12,8 @@ import signal
 import socket
 import select
 import re
+import pty
+import os
 
 from UDPTranslator import translateMessage, getMessageId
 from UDPMessages import confirm, reply, auth, join, msg, err, bye
@@ -137,15 +139,22 @@ class ExecutableTester:
             self.teardown()
         self.stdout_queue = queue.Queue()
         self.stderr_queue = queue.Queue()
+
+        master, slave = pty.openpty()  # Open a pseudo-terminal pair
+
         self.process = subprocess.Popen(
             [self.executable_path] + args,
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
+            stdout=slave,
             stderr=subprocess.PIPE,
             text=True,
-            bufsize=0,  # Line buffered
+            bufsize=0,  # Set small buffer size
         )
-        self._start_thread(self.read_stdout, self.stdout_queue)
+
+        os.close(slave)  # Close the slave fd, the subprocess will write to it
+        self.stdout_fd = master  # Use the master for reading output
+
+        self._start_thread(self.buffer_stdout_fd, self.stdout_queue)
         self._start_thread(self.read_stderr, self.stderr_queue)
         self.return_code = None
 
@@ -155,6 +164,22 @@ class ExecutableTester:
         thread = threading.Thread(target=target, args=(queue,))
         thread.daemon = True  # Thread dies with the program
         thread.start()
+
+    def buffer_stdout_fd(self, queue):
+        while True:
+            if self.stdout_fd and self.process and self.process.poll() is not None:
+                break  # Subprocess has terminated, exit the loop
+            try:
+                line = os.read(self.stdout_fd, 1024).decode("utf-8")
+                if line:
+                    if debug:
+                        print(
+                            colored("STDOUT:", "blue") + colored(line, "blue"), end=""
+                        )
+                    queue.put(line)
+            except Exception as e:
+                print(f"Error reading from pty: {e}")
+                break
 
     def read_stdout(self, queue):
         for line in iter(self.process.stdout.readline, ""):
@@ -493,6 +518,7 @@ def auth_and_reply(tester):
 
     # Check the output, should contain "Success: jojo"
     stderr = tester.get_stderr()
+    print([line for line in stderr.split("\n")])
     assert any(
         ["Success: jojo" in line for line in stderr.split("\n")]
     ), "Output does not match expected 'Success: jojo' output."
