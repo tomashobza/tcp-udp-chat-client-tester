@@ -129,8 +129,9 @@ class ExecutableTester:
                     return self.connection_socket.recv(1024).decode()
                 else:  # UDP
                     message, self.client_address = self.server_socket.recvfrom(1024)
-                    # we should confirm it directly
-                    self.confirm(message)
+                    if message[0] != 0:
+                        # we should confirm it directly
+                        self.confirm(message)
                     return message
             except socket.timeout:
                 raise TimeoutError("Socket timed out.")
@@ -144,7 +145,7 @@ class ExecutableTester:
         if platform == "linux" or platform == "linux2":
 
             self.process = subprocess.Popen(
-                ["stdbuf", "-o0",self.executable_path] + args,
+                ["stdbuf", "-o0", self.executable_path] + args,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
