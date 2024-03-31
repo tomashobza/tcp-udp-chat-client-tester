@@ -308,6 +308,7 @@ def all_args(tester):
 
 @testcase
 def udp_hello(tester):
+    """Test that the program does not accept any message commands before the user is authenticated."""
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
 
     # Invalid command for the START state
@@ -320,6 +321,7 @@ def udp_hello(tester):
 
 @testcase
 def udp_not_auth(tester):
+    """Test that the program does not accept any join commands before the user is authenticated."""
     tester.start_server("udp", 4567)
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
     tester.execute("/join")
@@ -333,6 +335,7 @@ def udp_not_auth(tester):
 
 @testcase
 def udp_invalid_command(tester):
+    """Test that the program does not accept invalid commands."""
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
 
     # Invalid command in general
@@ -345,6 +348,7 @@ def udp_invalid_command(tester):
 
 @testcase
 def udp_auth(tester):
+    """Test that the program sends the correct AUTH message."""
     tester.start_server("udp", 4567)
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
 
@@ -361,6 +365,7 @@ def udp_auth(tester):
 
 @testcase
 def udp_auth_port(tester):
+    """Test that the program sends the correct AUTH message when the port is non-default."""
     tester.start_server("udp", 1234)
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "1234"])
 
@@ -377,6 +382,7 @@ def udp_auth_port(tester):
 
 @testcase
 def udp_auth_nok(tester):
+    """Test that the program handles a NOK reply to AUTH correctly."""
     tester.start_server("udp", 4567)
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
 
@@ -410,6 +416,7 @@ def udp_auth_nok(tester):
 
 @testcase
 def udp_auth_nok_ok(tester):
+    """Test that the program handles a NOK reply to AUTH followed by a successful AUTH correctly."""
     tester.start_server("udp", 4567)
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
 
@@ -470,6 +477,7 @@ def udp_auth_nok_ok(tester):
 
 @testcase
 def udp_auth_port_change(tester):
+    """Test that the program switches to the new port after receiving an OK reply to AUTH."""
     # Start initial port listener
     tmp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     tmp_socket.bind(("localhost", 1234))
@@ -514,6 +522,7 @@ def udp_auth_port_change(tester):
 
 # Helper function
 def auth_and_reply(tester):
+    """Helper function to test the AUTH command followed by a successful reply."""
     tester.start_server("udp", 4567)
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
 
@@ -547,11 +556,13 @@ def auth_and_reply(tester):
 
 @testcase
 def udp_auth_ok(tester):
+    """Test that the program handles a successful reply to AUTH correctly."""
     auth_and_reply(tester)
 
 
 @testcase
 def udp_msg(tester):
+    """Test that the program sends the correct MSG message."""
     auth_and_reply(tester)
 
     tester.execute("ahojky")
@@ -566,6 +577,7 @@ def udp_msg(tester):
 
 @testcase
 def udp_svr_msg(tester):
+    """Test that the program handles a MSG message from the server correctly."""
     auth_and_reply(tester)
 
     # Send a message from the server
@@ -588,6 +600,7 @@ def udp_svr_msg(tester):
 
 @testcase
 def udp_bye1(tester):
+    """Test that the program handles SIGINT correctly."""
     auth_and_reply(tester)
 
     # Send a message from the server
@@ -602,6 +615,7 @@ def udp_bye1(tester):
 
 @testcase
 def udp_bye2(tester):
+    """Test that the program handles a C-d (stdin closed) correctly."""
     auth_and_reply(tester)
 
     # Send a message from the server
@@ -616,6 +630,7 @@ def udp_bye2(tester):
 
 @testcase
 def udp_server_err1(tester):
+    """Test that the program handles an ERR message from the server correctly while waiting for REPLY."""
     tester.start_server("udp", 4567)
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
 
@@ -656,6 +671,7 @@ def udp_server_err1(tester):
 
 @testcase
 def udp_server_err2(tester):
+    """Test that the program handles an ERR message from the server correctly."""
     auth_and_reply(tester)
 
     # Send a message from the server
@@ -685,6 +701,7 @@ def udp_server_err2(tester):
 
 @testcase
 def udp_join_ok(tester):
+    """Test that the program sends the correct JOIN message and hadles REPLY correctly."""
     auth_and_reply(tester)
 
     tester.execute("/rename user")
@@ -718,6 +735,7 @@ def udp_join_ok(tester):
 
 @testcase
 def udp_join_nok(tester):
+    """Test that the program sends the correct JOIN message and handles a NOK reply correctly."""
     auth_and_reply(tester)
 
     tester.execute("/rename user")
@@ -751,6 +769,7 @@ def udp_join_nok(tester):
 
 @testcase
 def udp_multiple_auth(tester):
+    """Test that the program does not allow multiple AUTH commands."""
     auth_and_reply(tester)
 
     tester.execute("/auth d e f")
@@ -766,6 +785,7 @@ def udp_multiple_auth(tester):
 
 @testcase
 def udp_invalid_msg(tester):
+    """Test that the program handles an invalid message correctly."""
     auth_and_reply(tester)
 
     # Send invalid message
@@ -797,6 +817,7 @@ def udp_invalid_msg(tester):
 
 @testcase
 def udp_auth_err(tester):
+    """Test that the program handles an ERR message from the server correctly."""
     tester.start_server("udp", 4567)
     tester.setup(args=["-t", "udp", "-s", "localhost", "-p", "4567"])
 
@@ -840,6 +861,7 @@ def udp_auth_err(tester):
 
 @testcase
 def tcp_hello(tester):
+    """Test that the program does not accept any message commands before the user is authenticated."""
     tester.start_server("tcp", 4567)
     tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
 
@@ -853,6 +875,7 @@ def tcp_hello(tester):
 
 @testcase
 def tcp_not_auth(tester):
+    """Test that the program does not accept any join commands before the user is authenticated."""
     tester.start_server("tcp", 4567)
     tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
     tester.execute("/join")
@@ -866,6 +889,7 @@ def tcp_not_auth(tester):
 
 @testcase
 def tcp_invalid_command(tester):
+    """Test that the program does not accept invalid commands."""
     tester.start_server("tcp", 4567)
     tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
 
@@ -879,6 +903,7 @@ def tcp_invalid_command(tester):
 
 @testcase
 def tcp_auth(tester):
+    """Test that the program sends the correct AUTH message."""
     tester.start_server("tcp", 4567)
     tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
     tester.execute("/auth a b c")
@@ -891,6 +916,7 @@ def tcp_auth(tester):
 
 @testcase
 def tcp_auth_ok(tester):
+    """Test that the program handles a successful reply to AUTH correctly."""
     tester.start_server("tcp", 4567)
     tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
     tester.execute("/auth a b c")
@@ -915,6 +941,7 @@ def tcp_auth_ok(tester):
 
 @testcase
 def tcp_auth_nok(tester):
+    """Test that the program handles a NOK reply to AUTH correctly."""
     tester.start_server("tcp", 4567)
     tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
     tester.execute("/auth a b c")
@@ -936,6 +963,7 @@ def tcp_auth_nok(tester):
 
 @testcase
 def tcp_auth_port(tester):
+    """Test that the program sends the correct AUTH message when the port is non-default."""
     tester.start_server("tcp", 4321)
     tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4321"])
 
@@ -951,6 +979,7 @@ def tcp_auth_port(tester):
 
 @testcase
 def tcp_auth_nok_ok(tester):
+    """Test that the program handles a NOK reply to AUTH followed by a successful AUTH correctly."""
     tester.start_server("tcp", 4567)
     tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
     tester.execute("/auth a b c")
@@ -988,6 +1017,7 @@ def tcp_auth_nok_ok(tester):
 
 # Helper function
 def tcp_auth_and_reply(tester):
+    """Helper function to test the AUTH command followed by a successful reply."""
     tester.start_server("tcp", 4567)
     tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
 
@@ -1014,11 +1044,13 @@ def tcp_auth_and_reply(tester):
 
 @testcase
 def tcp_auth_ok(tester):
+    """Test that the program handles a successful reply to AUTH correctly."""
     tcp_auth_and_reply(tester)
 
 
 @testcase
 def tcp_msg(tester):
+    """Test that the program sends the correct MSG message."""
     tcp_auth_and_reply(tester)
 
     tester.execute("ahojky")
@@ -1032,6 +1064,7 @@ def tcp_msg(tester):
 
 @testcase
 def tcp_svr_msg(tester):
+    """Test that the program handles a MSG message from the server correctly."""
     tcp_auth_and_reply(tester)
 
     # Send a message from the server
@@ -1048,6 +1081,7 @@ def tcp_svr_msg(tester):
 
 @testcase
 def tcp_bye(tester):
+    """Test that the program handles a C-d (stdin closed) correctly."""
     tcp_auth_and_reply(tester)
 
     # Send a message from the server
@@ -1059,6 +1093,7 @@ def tcp_bye(tester):
 
 @testcase
 def tcp_server_err1(tester):
+    """Test that the program handles an ERR message from the server correctly while waiting for REPLY."""
     tester.start_server("tcp", 4567)
     tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
 
@@ -1078,6 +1113,7 @@ def tcp_server_err1(tester):
 
 @testcase
 def tcp_server_err2(tester):
+    """Test that the program handles an ERR message from the server correctly."""
     tcp_auth_and_reply(tester)
 
     # Send a message from the server
@@ -1093,6 +1129,7 @@ def tcp_server_err2(tester):
 
 @testcase
 def tcp_join_ok(tester):
+    """Test that the program sends the correct JOIN message and handles REPLY correctly."""
     tcp_auth_and_reply(tester)
 
     tester.execute("/rename user")
@@ -1119,6 +1156,7 @@ def tcp_join_ok(tester):
 
 @testcase
 def tcp_join_nok(tester):
+    """Test that the program sends the correct JOIN message and handles a NOK reply correctly."""
     tcp_auth_and_reply(tester)
 
     tester.execute("/rename user")
@@ -1145,6 +1183,7 @@ def tcp_join_nok(tester):
 
 @testcase
 def tcp_multiple_auth(tester):
+    """Test that the program does not allow multiple AUTH commands."""
     tcp_auth_and_reply(tester)
 
     tester.execute("/auth d e f")
@@ -1160,6 +1199,7 @@ def tcp_multiple_auth(tester):
 
 @testcase
 def tcp_invalid_msg(tester):
+    """Test that the program handles an invalid message correctly."""
     tcp_auth_and_reply(tester)
 
     # Send invalid message
@@ -1191,6 +1231,7 @@ def tcp_invalid_msg(tester):
 
 @testcase
 def tcp_auth_err(tester):
+    """Test that the program handles an ERR message from the server correctly."""
     tester.start_server("tcp", 4567)
     tester.setup(args=["-t", "tcp", "-s", "localhost", "-p", "4567"])
     tester.execute("/auth a b c")
